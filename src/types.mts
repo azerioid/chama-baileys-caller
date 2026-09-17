@@ -45,6 +45,8 @@ export type VoipSdkConfig = {
   defaultAudioSource?: string;
   /** Auto-hangup duration in ms (default: 60000) */
   defaultDurationMs?: number;
+  /** Whether to print QR in terminal (default: false) */
+  printQrInTerminal?: boolean;
 };
 
 /** Mirrors the WhatsApp WASM `CallState` enum. */

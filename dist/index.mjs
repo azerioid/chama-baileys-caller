@@ -229,12 +229,11 @@ export class VoipClient extends EventEmitter {
                     this.emit("connection.update", update);
                     if (update.qr) {
                         this.emit("qr", update.qr);
-                        void import("qrcode-terminal")
-                            .then((qrt) => (qrt.default ?? qrt).generate(update.qr, { small: true }))
-                            .catch(() => {
-                            console.log("Scan this QR code in WhatsApp > Linked Devices:");
-                            console.log(update.qr);
-                        });
+                        if (this.#config.printQrInTerminal) {
+                            void import("qrcode-terminal")
+                                .then((qrt) => (qrt.default ?? qrt).generate(update.qr, { small: true }))
+                                .catch(() => { });
+                        }
                     }
                     if (update.connection === "open") {
                         opened = true;
