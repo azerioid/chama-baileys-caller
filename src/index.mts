@@ -491,4 +491,20 @@ export class VoipClient extends EventEmitter {
       this.#capturePtr = 0;
     }
   };
+
+  destroy = (): void => {
+    try {
+      this.#feeder?.stop();
+      this.#feeder = null;
+      this.#activeCall?.end();
+      this.#activeCall = null;
+      void this.#relay?.closeAll();
+      this.#relay = null;
+      this.#engine?.destroy();
+      this.#engine = null;
+      this.#sock?.end(undefined);
+      this.#sock = null;
+    } catch {}
+  };
 }
+

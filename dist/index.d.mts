@@ -58,4 +58,5 @@ export declare class VoipClient extends EventEmitter {
     rejectCall: () => void;
     /** Tear down the WhatsApp socket and release resources. */
     disconnect: () => void;
+    destroy: () => void;
 }
