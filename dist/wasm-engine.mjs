@@ -17,8 +17,8 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const CALL_WASM_AB_PROPS_JSON = process.env.CALL_WASM_AB_PROPS_JSON ?? "";
-const PTHREAD_POOL_SIZE = 20;
-const VOIP_READY_TIMEOUT_MS = 15_000;
+const PTHREAD_POOL_SIZE = Math.max(2, Math.min(Number(process.env.PTHREAD_POOL_SIZE || 4), 8));
+const VOIP_READY_TIMEOUT_MS = Number(process.env.VOIP_READY_TIMEOUT_MS || 45_000);
 const parseJsonObjectEnv = (raw) => {
     if (!raw)
         return {};
@@ -734,8 +734,13 @@ export class WasmEngine {
             if (msg && msg.cmd === "loaded") {
                 worker.removeMessageListener("cmd", loadedHandler);
                 this.#workersLoadedCount += 1;
-                if (this.#workersLoadedCount >= PTHREAD_POOL_SIZE && this.#removeRunDependencyCallback) {
-                    this.#removeRunDependencyCallback("loading-workers");
+                if (this.#workersLoadedCount >= PTHREAD_POOL_SIZE) {
+                    try {
+                        this.#vmContext?.removeRunDependency?.("loading-workers");
+                        this.#vmContext?.Module?.removeRunDependency?.("loading-workers");
+                        this.#removeRunDependencyCallback?.("loading-workers");
+                    }
+                    catch { }
                 }
                 resolve();
             }
@@ -1060,7 +1065,14 @@ export class WasmEngine {
         };
         const addRunDependency = (dep) => {
             if (dep === "loading-workers" && this.#workersLoadedCount >= PTHREAD_POOL_SIZE) {
-                setImmediate(() => this.#removeRunDependencyCallback?.(dep));
+                setImmediate(() => {
+                    try {
+                        this.#vmContext?.removeRunDependency?.(dep);
+                        this.#vmContext?.Module?.removeRunDependency?.(dep);
+                        this.#removeRunDependencyCallback?.(dep);
+                    }
+                    catch { }
+                });
             }
         };
         const removeRunDependency = (_dep) => { };
