@@ -240,11 +240,6 @@ export class VoipClient extends EventEmitter {
           this.emit("connection.update", update);
           if (update.qr) {
             this.emit("qr", update.qr);
-            if (this.#config.printQrInTerminal) {
-              void import("qrcode-terminal")
-                .then((qrt) => (qrt.default ?? qrt).generate(update.qr, { small: true }))
-                .catch(() => {});
-            }
           }
           if (update.connection === "open") {
             opened = true;
@@ -254,14 +249,16 @@ export class VoipClient extends EventEmitter {
             return;
           }
           if (update.connection === "close" && !opened) {
-            const statusCode = update.lastDisconnect?.error?.output?.statusCode;
-            const shouldReconnect =
-              statusCode === 515 || statusCode === DisconnectReason?.restartRequired;
-            if (shouldReconnect && retries < maxRetries) {
+            const err = update.lastDisconnect?.error;
+            const statusCode = err?.output?.statusCode ?? err?.data?.attrs?.code;
+            const msg = err?.message || "";
+            const isLoggedOut = statusCode === DisconnectReason?.loggedOut;
+
+            if (!isLoggedOut) {
               retries += 1;
-              setTimeout(connectSocket, 1000);
+              setTimeout(connectSocket, 1500);
             } else {
-              rejectOpen(update.lastDisconnect?.error ?? new Error("socket closed before open"));
+              rejectOpen(err ?? new Error("socket closed before open"));
             }
           }
         });

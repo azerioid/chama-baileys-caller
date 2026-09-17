@@ -1,1 +1,1 @@
-declare module "qrcode-terminal";
+// Removed - qrcode-terminal is no longer used.
