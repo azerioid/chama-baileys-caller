@@ -1,0 +1,49 @@
+{
+  "name": "chama-baileys-caller",
+  "version": "1.0.0",
+  "description": "WhatsApp Web VoIP Calling & Auto-Answer Engine powered by Baileys, WASM, and FFmpeg",
+  "author": "Chama",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "files": [
+    "dist",
+    "assets"
+  ],
+  "scripts": {
+    "build": "npm run clean && tsc -p tsconfig.worker.json && tsc -p tsconfig.json",
+    "clean": "node -e \"const fs = require('fs'); fs.rmSync('./dist', { recursive: true, force: true });\"",
+    "start:bot": "tsx examples/auto-answer-bot.mts",
+    "start:call": "tsx examples/outbound-call.mts"
+  },
+  "keywords": [
+    "whatsapp",
+    "baileys",
+    "voip",
+    "call",
+    "auto-answer",
+    "webrtc",
+    "audio-stream",
+    "chama"
+  ],
+  "dependencies": {
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
+    "qrcode-terminal": "^0.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/qrcode-terminal": "^0.12.2",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
