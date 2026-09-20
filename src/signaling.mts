@@ -35,11 +35,21 @@ let _baileysModule: any = null;
 const loadBaileys = async (): Promise<any> => {
   if (_baileysModule) return _baileysModule;
   try {
+    const rel = "../index.js";
+    _baileysModule = await import(rel);
+    return _baileysModule;
+  } catch {}
+  try {
+    const rel2 = "./index.js";
+    _baileysModule = await import(rel2);
+    return _baileysModule;
+  } catch {}
+  try {
     _baileysModule = await import("@whiskeysockets/baileys");
     return _baileysModule;
   } catch {
     throw new Error(
-      "Could not import @whiskeysockets/baileys. Install it as a peer dependency.",
+      "Could not load Baileys module. Make sure chama-baileys-caller or @whiskeysockets/baileys is available.",
     );
   }
 };
@@ -112,19 +122,25 @@ export class SignalingBridge {
   sendSignaling = (peerJid: string, callId: string, xmlPayload: Uint8Array): void => {
     this.#outgoingSignalingQueue = this.#outgoingSignalingQueue
       .then(() => this.#doSendSignaling(peerJid, callId, xmlPayload))
-      .catch(() => {});
+      .catch((err) => {
+        console.error("[Signaling] Error in sendSignaling:", err);
+      });
   };
 
   processIncomingCall = (node: any, voip: any, activeCallId: string): void => {
     this.#incomingSignalingQueue = this.#incomingSignalingQueue
       .then(() => this.#doProcessIncomingCall(node, voip, activeCallId))
-      .catch(() => {});
+      .catch((err) => {
+        console.error("[Signaling] Error in processIncomingCall:", err);
+      });
   };
 
   processIncomingReceipt = (node: any, voip: any, activeCallId: string): void => {
     this.#incomingSignalingQueue = this.#incomingSignalingQueue
       .then(() => this.#doProcessIncomingReceipt(node, voip, activeCallId))
-      .catch(() => {});
+      .catch((err) => {
+        console.error("[Signaling] Error in processIncomingReceipt:", err);
+      });
   };
 
   requestTcToken = async (jid: string): Promise<Uint8Array | undefined> => {
@@ -232,6 +248,7 @@ export class SignalingBridge {
 
     const signalingTag = String(voipNode.tag);
     const effectivePeerJid = this.#resolveOutboundPeerJid(callId, peerJid);
+    console.log(`[Signaling] Preparing outbound stanza <${signalingTag}> to ${effectivePeerJid} (callId: ${callId})`);
 
     if (signalingTag === "offer" && !voipNode.attrs["call-creator"]) {
       const selfLid = this.#sock.authState.creds.me?.lid;
@@ -304,6 +321,7 @@ export class SignalingBridge {
     callbackPeerJid: string,
   ): Promise<void> => {
     const stanzaId = this.#sock.generateMessageTag();
+    console.log(`[Signaling] Sending call stanza <${signalingTag}> to: ${routeTo} (tag id: ${stanzaId})...`);
     await this.#sock.sendNode({
       tag: "call",
       attrs: { to: routeTo, id: stanzaId },
@@ -314,6 +332,7 @@ export class SignalingBridge {
       try {
         const ackNode = await this.#sock.waitForMessage(stanzaId, ACK_TIMEOUT_MS);
         if (!ackNode || !this.#voip) return;
+        console.log(`✅ [Signaling] Received server ACK for stanza <${signalingTag}> (type: ${ackNode.attrs?.type || "ok"})`);
         const { encodeBinaryNode } = this.#baileys;
         const ackPayload = Buffer.from(encodeBinaryNode(ackNode)).toString("base64");
         const tcToken = await this.ensureTcToken(effectivePeerJid, callbackPeerJid);
@@ -326,7 +345,9 @@ export class SignalingBridge {
             extraData: tcToken,
           });
         } catch {}
-      } catch {}
+      } catch (err: any) {
+        console.warn(`⚠️ [Signaling] Timeout waiting for ACK of <${signalingTag}>:`, err?.message || err);
+      }
     })();
   };
 

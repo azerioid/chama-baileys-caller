@@ -3,7 +3,7 @@
   "compilerOptions": {
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "outDir": "./dist",
+    "outDir": "./lib/Caller",
     "noEmit": false,
     "allowImportingTsExtensions": false,
     "declaration": false

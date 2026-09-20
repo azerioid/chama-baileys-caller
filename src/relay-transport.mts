@@ -437,11 +437,10 @@ export class RelayRtcTransport {
     });
     connection.peerConnection = pc;
     connection.dataChannel = dc;
-    dc.binaryType = "arraybuffer";
-
     dc.onopen = (): void => {
       connection.state = "open";
       connection.isReconnecting = false;
+      console.log(`✅ [Relay] WebRTC DataChannel OPENED to WhatsApp edge: ${connection.info.ip}:${connection.info.port}`);
       if (connection.connectionTimeout) {
         clearTimeout(connection.connectionTimeout);
         connection.connectionTimeout = null;
@@ -451,10 +450,12 @@ export class RelayRtcTransport {
     };
 
     dc.onclose = (): void => {
+      console.log(`[Relay] DataChannel closed to ${connection.info.ip}:${connection.info.port}`);
       if (connection.state !== "failed") connection.state = "closed";
     };
 
-    dc.onerror = (): void => {
+    dc.onerror = (err: any): void => {
+      console.error(`❌ [Relay] DataChannel error to ${connection.info.ip}:${connection.info.port}:`, err);
       connection.state = "failed";
     };
 

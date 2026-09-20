@@ -27,10 +27,18 @@ const SHA256_LEN = 32;
 
 const loadBaileys = async (): Promise<any> => {
   try {
+    const rel = "../index.js";
+    return await import(rel);
+  } catch {}
+  try {
+    const rel2 = "./index.js";
+    return await import(rel2);
+  } catch {}
+  try {
     return await import("@whiskeysockets/baileys");
   } catch {
     throw new Error(
-      "Could not import @whiskeysockets/baileys. Install it as a peer dependency.",
+      "Could not load Baileys module. Make sure chama-baileys-caller or @whiskeysockets/baileys is available.",
     );
   }
 };
@@ -437,19 +445,23 @@ export class VoipClient extends EventEmitter {
   };
 
   #handleCallEvent = (eventType: number, eventData?: string): void => {
+    console.log(`[VoipClient] WASM Event ${eventType}:`, eventData ? eventData.slice(0, 100) : "");
     if (eventType === 16 && eventData) {
       try {
         const parsed = JSON.parse(eventData);
         const info = parsed.call_info ?? parsed.callInfo ?? {};
         const callState = Number(info.call_state ?? info.callState ?? 0);
+        console.log(`[VoipClient] WASM Call State transitioned to: ${callState}`);
         this.#activeCall?._updateState(callState);
       } catch {}
     } else if (eventType === 156 && eventData) {
       try {
         const update = JSON.parse(eventData) as RelayListUpdatePayload;
+        console.log(`[VoipClient] WASM Relay List Update (${update.relays?.length || 0} relays available)`);
         this.#relay?.updateRelayList(update);
       } catch {}
     } else if (eventType === 2) {
+      console.log("[VoipClient] WASM Event 2 (remote_end) received!");
       this.#activeCall?._forceEnd("remote_end");
     }
   };

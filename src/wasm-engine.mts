@@ -268,9 +268,23 @@ export class WasmEngine {
   #loaderCode = "";
 
   constructor(config: WasmEngineConfig = {}) {
+    const findAssetsRoot = (): string => {
+      const candidates = [
+        path.resolve(__dirname, ".."),
+        path.resolve(__dirname, "../.."),
+        process.cwd(),
+      ];
+      for (const candidate of candidates) {
+        if (fs.existsSync(path.join(candidate, "assets", "wasm", "whatsapp.wasm"))) {
+          return candidate;
+        }
+      }
+      return path.resolve(__dirname, "../..");
+    };
+
     const basePath = config.resourcesPath
       ? (path.isAbsolute(config.resourcesPath) ? config.resourcesPath : path.resolve(process.cwd(), config.resourcesPath))
-      : path.resolve(__dirname, "..");
+      : findAssetsRoot();
     const wasmPath = config.wasmPath
       ? (path.isAbsolute(config.wasmPath) ? config.wasmPath : path.resolve(process.cwd(), config.wasmPath))
       : path.join(basePath, "assets", "wasm", "whatsapp.wasm");
