@@ -1,6 +1,6 @@
 {
   "name": "chama-baileys-caller",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "WhatsApp Web VoIP Calling & Auto-Answer Engine powered by Baileys, WASM, and FFmpeg",
   "author": "Chama",
   "license": "MIT",

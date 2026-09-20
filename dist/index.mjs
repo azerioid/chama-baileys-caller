@@ -76,6 +76,7 @@ export class ActiveCall extends EventEmitter {
     _audioSource = "silence";
     peerJid = "";
     isIncoming = false;
+    #accepted = false;
     constructor(callId, engine, durationMs) {
         super();
         this.callId = callId;
@@ -87,8 +88,9 @@ export class ActiveCall extends EventEmitter {
     }
     get state() { return this.#state; }
     accept = (audioSource) => {
-        if (this.#ended)
+        if (this.#ended || this.#accepted)
             return;
+        this.#accepted = true;
         if (audioSource)
             this._audioSource = audioSource;
         try {
@@ -339,8 +341,9 @@ export class VoipClient extends EventEmitter {
     acceptCall = (audioSource) => {
         if (!this.#engine)
             throw new Error("Not connected. Call connect() first.");
-        if (audioSource && this.#activeCall) {
-            this.#activeCall._audioSource = audioSource;
+        if (this.#activeCall) {
+            this.#activeCall.accept(audioSource);
+            return;
         }
         this.#engine.acceptCall(true, false);
     };

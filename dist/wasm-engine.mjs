@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const CALL_WASM_AB_PROPS_JSON = process.env.CALL_WASM_AB_PROPS_JSON ?? "";
-const PTHREAD_POOL_SIZE = Math.max(2, Math.min(Number(process.env.PTHREAD_POOL_SIZE || 4), 8));
+const PTHREAD_POOL_SIZE = Math.max(1, Math.min(Number(process.env.PTHREAD_POOL_SIZE || 1), 4));
 const VOIP_READY_TIMEOUT_MS = Number(process.env.VOIP_READY_TIMEOUT_MS || 45_000);
 const parseJsonObjectEnv = (raw) => {
     if (!raw)

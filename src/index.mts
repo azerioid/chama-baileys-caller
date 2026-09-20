@@ -89,6 +89,8 @@ export class ActiveCall extends EventEmitter {
   public peerJid: string = "";
   public isIncoming: boolean = false;
 
+  #accepted = false;
+
   constructor(
     public readonly callId: string,
     private readonly engine: WasmEngine,
@@ -104,7 +106,8 @@ export class ActiveCall extends EventEmitter {
   get state(): CallState { return this.#state; }
 
   accept = (audioSource?: string): void => {
-    if (this.#ended) return;
+    if (this.#ended || this.#accepted) return;
+    this.#accepted = true;
     if (audioSource) this._audioSource = audioSource;
     try { this.engine.acceptCall(true, false); } catch {}
   };
@@ -362,8 +365,9 @@ export class VoipClient extends EventEmitter {
   /** Accept an incoming call */
   acceptCall = (audioSource?: string): void => {
     if (!this.#engine) throw new Error("Not connected. Call connect() first.");
-    if (audioSource && this.#activeCall) {
-      this.#activeCall._audioSource = audioSource;
+    if (this.#activeCall) {
+      this.#activeCall.accept(audioSource);
+      return;
     }
     this.#engine.acceptCall(true, false);
   };
