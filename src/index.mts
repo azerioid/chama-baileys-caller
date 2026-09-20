@@ -98,6 +98,8 @@ export class ActiveCall extends EventEmitter {
   public isIncoming: boolean = false;
 
   #accepted = false;
+  /** @internal */
+  _shouldAutoAccept = false;
 
   constructor(
     public readonly callId: string,
@@ -117,7 +119,16 @@ export class ActiveCall extends EventEmitter {
     if (this.#ended || this.#accepted) return;
     this.#accepted = true;
     if (audioSource) this._audioSource = audioSource;
-    try { this.engine.acceptCall(true, false); } catch {}
+
+    if (this.#state >= CallState.ReceivedCall) {
+      console.log(`[ActiveCall] Accepting call ${this.callId} immediately (WASM state: ${this.#state})...`);
+      try { this.engine.acceptCall(true, false); } catch (err: any) {
+        console.error("[ActiveCall] acceptCall error:", err?.message || err);
+      }
+    } else {
+      console.log(`[ActiveCall] Call ${this.callId} accept requested, but WASM state is ${this.#state}. Queuing accept until WASM reaches ReceivedCall (3)...`);
+      this._shouldAutoAccept = true;
+    }
   };
 
   reject = (): void => {
@@ -143,9 +154,19 @@ export class ActiveCall extends EventEmitter {
   /** @internal — called by VoipClient on WASM call-state change */
   _updateState = (state: number): void => {
     this.#state = state as CallState;
-    if (state === CallState.PreacceptReceived) this.emit("ringing");
-    else if (state === CallState.Active) this.emit("connected");
-    else if (state === CallState.Idle || state === CallState.Ending) {
+    if (state === CallState.ReceivedCall) {
+      if (this._shouldAutoAccept) {
+        this._shouldAutoAccept = false;
+        console.log(`[ActiveCall] WASM reached ReceivedCall (state 3) for call ${this.callId}. Executing queued accept now!`);
+        try { this.engine.acceptCall(true, false); } catch (err: any) {
+          console.error("[ActiveCall] Delayed acceptCall error:", err?.message || err);
+        }
+      }
+    } else if (state === CallState.PreacceptReceived) {
+      this.emit("ringing");
+    } else if (state === CallState.Active) {
+      this.emit("connected");
+    } else if (state === CallState.Idle || state === CallState.Ending) {
       this._forceEnd("ended");
     }
   };
@@ -336,11 +357,15 @@ export class VoipClient extends EventEmitter {
     await this.#engine.waitForVoipStackReady();
     try { this.#engine.updateNetworkMedium(2, 0); } catch {}
 
-    this.#sock.ws?.on?.("CB:call", (node: any) => {
+    this.#sock.ws?.on?.("CB:call", async (node: any) => {
       console.log(`\n🔔 [VoipClient] Received CB:call stanza! Node tag: ${node?.tag}`);
-      this.#signaling!.processIncomingCall(node, this.#engine!, this.#activeCall?.callId ?? "");
-      this.#checkIncomingCallOffer(node);
       this.#checkIncomingCallTerminate(node);
+      this.#checkIncomingCallOffer(node);
+      try {
+        await this.#signaling!.processIncomingCall(node, this.#engine!, this.#activeCall?.callId ?? "");
+      } catch (err: any) {
+        console.error("[VoipClient] Error processing incoming call signaling:", err);
+      }
     });
     this.#sock.ws?.on?.("CB:receipt", (node: any) => {
       if (!isCallReceiptNode(node)) return;
@@ -480,14 +505,8 @@ export class VoipClient extends EventEmitter {
       this.emit("call", call);
 
       if (this.#config.autoAnswer) {
-        setTimeout(() => {
-          try {
-            console.log(`[VoipClient] Auto-answering call from ${call.peerJid}...`);
-            this.acceptCall(call._audioSource);
-          } catch (err) {
-            console.error("[VoipClient] Auto-answer error:", err);
-          }
-        }, 1000);
+        console.log(`[VoipClient] autoAnswer is enabled. Requesting accept for call ${call.callId}...`);
+        call.accept(call._audioSource);
       }
     } catch (err) {
       console.error("[VoipClient] Error inspecting incoming call:", err);

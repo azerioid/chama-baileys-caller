@@ -1,0 +1,18 @@
+{
+  "name": "chama-whatsapp-call-bot-base",
+  "version": "1.0.0",
+  "description": "Ultra-lightweight WhatsApp VoIP Call Auto-Answer Bot Base by Chama",
+  "author": "Chama (@chamanemax02)",
+  "license": "MIT",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "chama-baileys-caller": "git+https://github.com/chamanemax02/chama-baileys-caller.git#v1.2.6"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

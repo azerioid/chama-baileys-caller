@@ -127,20 +127,22 @@ export class SignalingBridge {
       });
   };
 
-  processIncomingCall = (node: any, voip: any, activeCallId: string): void => {
+  processIncomingCall = (node: any, voip: any, activeCallId: string): Promise<void> => {
     this.#incomingSignalingQueue = this.#incomingSignalingQueue
       .then(() => this.#doProcessIncomingCall(node, voip, activeCallId))
       .catch((err) => {
         console.error("[Signaling] Error in processIncomingCall:", err);
       });
+    return this.#incomingSignalingQueue;
   };
 
-  processIncomingReceipt = (node: any, voip: any, activeCallId: string): void => {
+  processIncomingReceipt = (node: any, voip: any, activeCallId: string): Promise<void> => {
     this.#incomingSignalingQueue = this.#incomingSignalingQueue
       .then(() => this.#doProcessIncomingReceipt(node, voip, activeCallId))
       .catch((err) => {
         console.error("[Signaling] Error in processIncomingReceipt:", err);
       });
+    return this.#incomingSignalingQueue;
   };
 
   requestTcToken = async (jid: string): Promise<Uint8Array | undefined> => {
@@ -475,7 +477,12 @@ export class SignalingBridge {
     const type = enc.attrs.type;
     if (type !== "pkmsg" && type !== "msg") return voipNode;
 
-    const candidates = [...new Set([peerJid, this.#toCallDeviceJid(peerJid)])].filter(Boolean);
+    const bareJid = this.#toBareJid(peerJid);
+    const callDeviceJid = this.#toCallDeviceJid(peerJid);
+    const primaryDeviceJid = `${this.#baileys.jidDecode(peerJid)?.user}:0@${peerJid.endsWith("@lid") ? "lid" : "s.whatsapp.net"}`;
+    const candidates = [...new Set([peerJid, callDeviceJid, primaryDeviceJid, bareJid])].filter(Boolean);
+
+    console.log(`[Signaling] Decrypting incoming <enc type="${type}"> for call peer ${peerJid}...`);
     let lastErr: unknown;
     for (const jid of candidates) {
       try {
@@ -487,12 +494,14 @@ export class SignalingBridge {
         if (!callKey || callKey.length === 0) {
           throw new Error("decrypted signaling has no call.callKey");
         }
+        console.log(`✅ [Signaling] Successfully decrypted callKey (${callKey.length} bytes) using JID ${jid}`);
         enc.content = callKey;
         return voipNode;
-      } catch (err) {
+      } catch (err: any) {
         lastErr = err;
       }
     }
+    console.error(`❌ [Signaling] Failed to decrypt incoming call enc from ${peerJid}:`, (lastErr as any)?.message || lastErr);
     throw lastErr;
   };
 
@@ -584,12 +593,12 @@ export class SignalingBridge {
   };
 
   #toCallDeviceJid = (jid: string): string => {
-    const { jidDecode, jidEncode } = this.#baileys;
+    const { jidDecode } = this.#baileys;
     const decoded = jidDecode(jid);
     if (!decoded?.user) return jid;
     const server = jid.endsWith("@lid") ? "lid" : "s.whatsapp.net";
-    if (decoded.device == null) return jidEncode(decoded.user, server);
-    return `${decoded.user}:${decoded.device}@${server}`;
+    const device = decoded.device ?? 0;
+    return `${decoded.user}:${device}@${server}`;
   };
 
   #toPrimaryDeviceJid = (jid: string): string | undefined => {

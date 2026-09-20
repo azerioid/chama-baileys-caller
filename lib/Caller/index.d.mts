@@ -24,6 +24,8 @@ export declare class ActiveCall extends EventEmitter {
     _audioSource: string;
     peerJid: string;
     isIncoming: boolean;
+    /** @internal */
+    _shouldAutoAccept: boolean;
     constructor(callId: string, engine: WasmEngine, durationMs: number);
     get state(): CallState;
     accept: (audioSource?: string) => void;

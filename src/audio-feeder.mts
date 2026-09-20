@@ -81,20 +81,6 @@ export class AudioFeeder {
 
     proc.stdout.on("data", (chunk: Buffer) => {
       chunks.push(chunk);
-      // Start streaming immediately once we have buffered at least 200ms
-      if (!this.#samples && chunks.length > 0) {
-        const totalBytes = chunks.reduce((acc, c) => acc + c.length, 0);
-        if (totalBytes >= chunkSamples * 4 * 10) {
-          const partialBuf = Buffer.concat(chunks);
-          const numFloats = Math.floor(partialBuf.length / 4);
-          const partialFloats = new Float32Array(numFloats);
-          const srcView = new Uint8Array(partialBuf.buffer, partialBuf.byteOffset, numFloats * 4);
-          const dstView = new Uint8Array(partialFloats.buffer, partialFloats.byteOffset, numFloats * 4);
-          dstView.set(srcView);
-          this.#samples = partialFloats;
-          this.#startClock(chunkSamples, chunkIntervalMs);
-        }
-      }
     });
 
     proc.stderr.on("data", (chunk: Buffer) => {
