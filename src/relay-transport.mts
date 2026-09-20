@@ -413,82 +413,109 @@ export class RelayRtcTransport {
 
   #ensureConnection = async (info: RelayConnectionInfo): Promise<void> => {
     const connection = this.#getOrCreateConnection(info);
+    if (connection.connectPromise) {
+      return connection.connectPromise;
+    }
     if (connection.state === "open" || connection.state === "connecting") {
-      return connection.connectPromise ?? Promise.resolve();
+      return;
     }
     const promise = this.#connect(connection);
     connection.connectPromise = promise;
-    try { await promise; } finally { connection.connectPromise = null; }
+    try {
+      await promise;
+    } catch (err: any) {
+      console.warn(`[Relay] EnsureConnection warning for ${info.id}:`, err?.message || err);
+    } finally {
+      connection.connectPromise = null;
+    }
   };
 
   #connect = async (connection: RelayConnectionRuntime): Promise<void> => {
-    const wrtcModule = await this.#loadWrtc();
-    const { RTCPeerConnection } = wrtcModule;
-    if (typeof RTCPeerConnection !== "function") {
-      throw new Error("RTCPeerConnection unavailable from @roamhq/wrtc");
-    }
-
-    this.#closePeerObjects(connection);
     connection.state = "connecting";
-
-    const pc = new RTCPeerConnection();
-    const dc = pc.createDataChannel("pre-negotiated", {
-      negotiated: true, id: 0, ordered: false, maxRetransmits: 0, priority: "high",
-    });
-    connection.peerConnection = pc;
-    connection.dataChannel = dc;
-    dc.onopen = (): void => {
-      connection.state = "open";
-      connection.isReconnecting = false;
-      console.log(`✅ [Relay] WebRTC DataChannel OPENED to WhatsApp edge: ${connection.info.ip}:${connection.info.port}`);
-      if (connection.connectionTimeout) {
-        clearTimeout(connection.connectionTimeout);
-        connection.connectionTimeout = null;
+    try {
+      const wrtcModule = await this.#loadWrtc();
+      const { RTCPeerConnection } = wrtcModule;
+      if (typeof RTCPeerConnection !== "function") {
+        throw new Error("RTCPeerConnection unavailable from @roamhq/wrtc");
       }
-      this.#flushBufferedPackets(connection);
-      this.#startIceRttPolling(connection);
-    };
 
-    dc.onclose = (): void => {
-      console.log(`[Relay] DataChannel closed to ${connection.info.ip}:${connection.info.port}`);
-      if (connection.state !== "failed") connection.state = "closed";
-    };
+      this.#closePeerObjects(connection);
+      if ((connection.state as any) === "closed") return;
 
-    dc.onerror = (err: any): void => {
-      console.error(`❌ [Relay] DataChannel error to ${connection.info.ip}:${connection.info.port}:`, err);
-      connection.state = "failed";
-    };
+      const pc = new RTCPeerConnection();
+      const dc = pc.createDataChannel("pre-negotiated", {
+        negotiated: true, id: 0, ordered: false, maxRetransmits: 0, priority: "high",
+      });
+      connection.peerConnection = pc;
+      connection.dataChannel = dc;
+      dc.binaryType = "arraybuffer";
 
-    dc.onmessage = (event: { data: unknown }): void => {
-      this.#handleIncomingPacket(connection, event.data);
-    };
+      dc.onopen = (): void => {
+        connection.state = "open";
+        connection.isReconnecting = false;
+        console.log(`✅ [Relay] WebRTC DataChannel OPENED to WhatsApp edge: ${connection.info.ip}:${connection.info.port}`);
+        if (connection.connectionTimeout) {
+          clearTimeout(connection.connectionTimeout);
+          connection.connectionTimeout = null;
+        }
+        this.#flushBufferedPackets(connection);
+        this.#startIceRttPolling(connection);
+      };
 
-    pc.onicecandidate = (event: { candidate?: { candidate?: string } | null }): void => {
-      if (event.candidate?.candidate && !connection.iceCandidate) {
-        connection.iceCandidate = event.candidate.candidate;
-      }
-    };
+      dc.onclose = (): void => {
+        console.log(`[Relay] DataChannel closed to ${connection.info.ip}:${connection.info.port}`);
+        if (connection.state !== "failed") connection.state = "closed";
+      };
 
-    pc.oniceconnectionstatechange = (): void => {
-      if (pc.iceConnectionState === "failed" || pc.iceConnectionState === "closed") {
+      dc.onerror = (err: any): void => {
+        console.error(`❌ [Relay] DataChannel error to ${connection.info.ip}:${connection.info.port}:`, err);
         connection.state = "failed";
-      }
-    };
+      };
 
-    connection.connectionTimeout = setTimeout(() => {
-      if (connection.state === "connecting") {
-        connection.state = "failed";
-        this.#closePeerObjects(connection);
-      }
-    }, CONNECTION_TIMEOUT_MS);
+      dc.onmessage = (event: { data: unknown }): void => {
+        this.#handleIncomingPacket(connection, event.data);
+      };
 
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    const remoteSdp = buildRemoteRelayAnswer(offer.sdp ?? "", {
-      ...connection.info,
-      port: getRtcConnectPort(connection.info),
-    });
-    await pc.setRemoteDescription({ type: "answer", sdp: remoteSdp });
+      pc.onicecandidate = (event: { candidate?: { candidate?: string } | null }): void => {
+        if (event.candidate?.candidate && !connection.iceCandidate) {
+          connection.iceCandidate = event.candidate.candidate;
+        }
+      };
+
+      pc.oniceconnectionstatechange = (): void => {
+        if (pc.iceConnectionState === "failed" || pc.iceConnectionState === "closed") {
+          connection.state = "failed";
+        }
+      };
+
+      connection.connectionTimeout = setTimeout(() => {
+        if (connection.state === "connecting") {
+          connection.state = "failed";
+          this.#closePeerObjects(connection);
+        }
+      }, CONNECTION_TIMEOUT_MS);
+
+      if (pc.signalingState === "closed") return;
+
+      const offer = await pc.createOffer();
+      if (pc.signalingState === "closed") return;
+
+      await pc.setLocalDescription(offer);
+      if (pc.signalingState === "closed") return;
+
+      const remoteSdp = buildRemoteRelayAnswer(offer.sdp ?? "", {
+        ...connection.info,
+        port: getRtcConnectPort(connection.info),
+      });
+
+      if (pc.signalingState === "closed") return;
+
+      await pc.setRemoteDescription({ type: "answer", sdp: remoteSdp });
+    } catch (err: any) {
+      console.warn(`[Relay] Connection failed or closed prematurely to ${connection.info.ip}:${connection.info.port}:`, err?.message || err);
+      if ((connection.state as any) !== "closed") connection.state = "failed";
+      this.#closePeerObjects(connection);
+    }
   };
 
   #restartIce = async (connection: RelayConnectionRuntime): Promise<void> => {
@@ -500,6 +527,7 @@ export class RelayRtcTransport {
     connection.isReconnecting = true;
     try {
       this.#closePeerObjects(connection);
+      if ((connection.state as any) === "closed") return;
       connection.state = "connecting";
 
       const pc = new RTCPeerConnection();
@@ -532,11 +560,14 @@ export class RelayRtcTransport {
       if (connection.iceCandidate) {
         localSdp = `${removeIceCandidates(localSdp)}a=${connection.iceCandidate}\r\na=end-of-candidates\r\n`;
       }
+      if (pc.signalingState === "closed") return;
       await pc.setLocalDescription({ type: "offer", sdp: localSdp });
+      if (pc.signalingState === "closed") return;
       const remoteSdp = buildRemoteRelayAnswer(localSdp, {
         ...connection.info,
         port: getRtcConnectPort(connection.info),
       });
+      if (pc.signalingState === "closed") return;
       await pc.setRemoteDescription({ type: "answer", sdp: remoteSdp });
     } catch {
       connection.state = "failed";

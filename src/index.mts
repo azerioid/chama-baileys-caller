@@ -336,12 +336,16 @@ export class VoipClient extends EventEmitter {
     try { this.#engine.updateNetworkMedium(2, 0); } catch {}
 
     this.#sock.ws?.on?.("CB:call", (node: any) => {
+      console.log(`\n🔔 [VoipClient] Received CB:call stanza! Node tag: ${node?.tag}`);
       this.#signaling!.processIncomingCall(node, this.#engine!, this.#activeCall?.callId ?? "");
       this.#checkIncomingCallOffer(node);
     });
     this.#sock.ws?.on?.("CB:receipt", (node: any) => {
       if (!isCallReceiptNode(node)) return;
       this.#signaling!.processIncomingReceipt(node, this.#engine!, this.#activeCall?.callId ?? "");
+    });
+    this.#sock.ev?.on?.("call", (calls: any[]) => {
+      console.log(`\n🔔 [Baileys EV] Received call event on socket.ev:`, JSON.stringify(calls));
     });
   };
 
@@ -432,6 +436,7 @@ export class VoipClient extends EventEmitter {
     try {
       const { getAllBinaryNodeChildren } = this.#baileys;
       const voipChild = getAllBinaryNodeChildren(node)[0];
+      console.log(`📞 [VoipClient] checkIncomingCallOffer child tag: <${voipChild?.tag}>`);
       if (!voipChild || voipChild.tag !== "offer") return;
 
       const incomingCallId = String(voipChild.attrs["call-id"] ?? voipChild.attrs.call_id ?? "");
@@ -457,6 +462,7 @@ export class VoipClient extends EventEmitter {
           this.#activeCall = null;
         }
         this.#handleAudioCaptureStop();
+        void this.#relay?.closeAll();
       });
 
       this.emit("call", call);

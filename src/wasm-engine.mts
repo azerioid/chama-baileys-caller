@@ -596,7 +596,7 @@ export class WasmEngine {
       const ptr = this.malloc(data.byteLength);
       if (!ptr) return;
       try {
-        const heapU8 = this.#instance.GROWABLE_HEAP_U8?.() ?? this.#instance.HEAPU8;
+        const heapU8 = this.#getHeapU8();
         if (!heapU8) return;
         heapU8.set(data, ptr);
         this.#instance.handleOnMessageFromHeap(ptr, data.byteLength, ip, port);
@@ -624,13 +624,15 @@ export class WasmEngine {
     if (!data || data.length === 0 || !ptr) return;
     if (typeof this.#instance.onAudioDataFromJs !== "function") return;
     try {
-      const heapF32 = this.#instance.GROWABLE_HEAP_F32?.();
+      const heapF32 = this.#getHeapF32();
       if (!heapF32) return;
       const index = Math.floor(ptr / 4);
       if (index < 0 || index + data.length > heapF32.length) return;
       heapF32.set(data, index);
       this.#instance.onAudioDataFromJs(ptr, data.length);
-    } catch {}
+    } catch (err) {
+      console.warn("[WasmEngine] Error sending audio frame to WASM:", err);
+    }
   };
 
   malloc = (size: number): number => {
@@ -649,6 +651,38 @@ export class WasmEngine {
     if (!this.#initialized || !this.#instance) {
       throw new Error("WasmEngine not initialized. Call initialize() first.");
     }
+  };
+
+  #getHeapU8 = (): Uint8Array | null => {
+    try {
+      if (typeof this.#instance?.GROWABLE_HEAP_U8 === "function") {
+        const h = this.#instance.GROWABLE_HEAP_U8();
+        if (h && h.buffer && h.buffer.byteLength > 0) return h;
+      }
+      if (this.#instance?.HEAPU8 && this.#instance.HEAPU8.buffer && this.#instance.HEAPU8.buffer.byteLength > 0) {
+        return this.#instance.HEAPU8;
+      }
+      if (this.#wasmMemory && this.#wasmMemory.buffer && this.#wasmMemory.buffer.byteLength > 0) {
+        return new Uint8Array(this.#wasmMemory.buffer);
+      }
+    } catch {}
+    return null;
+  };
+
+  #getHeapF32 = (): Float32Array | null => {
+    try {
+      if (typeof this.#instance?.GROWABLE_HEAP_F32 === "function") {
+        const h = this.#instance.GROWABLE_HEAP_F32();
+        if (h && h.buffer && h.buffer.byteLength > 0) return h;
+      }
+      if (this.#instance?.HEAPF32 && this.#instance.HEAPF32.buffer && this.#instance.HEAPF32.buffer.byteLength > 0) {
+        return this.#instance.HEAPF32;
+      }
+      if (this.#wasmMemory && this.#wasmMemory.buffer && this.#wasmMemory.buffer.byteLength > 0) {
+        return new Float32Array(this.#wasmMemory.buffer);
+      }
+    } catch {}
+    return null;
   };
 
   #makeStringList = (arr: string[]): any => {
@@ -688,7 +722,7 @@ export class WasmEngine {
       }
       try {
         this.#instance.requestAudioDataFromWasmVoip(this.#audioPlaybackBuffer!, bufferSize);
-        const heapF32 = this.#instance.GROWABLE_HEAP_F32?.();
+        const heapF32 = this.#getHeapF32();
         if (!heapF32) return;
         const index = Math.floor(this.#audioPlaybackBuffer! / 4);
         const numFloats = Math.floor(bufferSize / 4);
