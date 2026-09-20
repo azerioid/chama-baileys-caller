@@ -427,6 +427,13 @@ export class VoipClient extends EventEmitter {
       call._audioSource = this.#config.defaultAudioSource ?? "silence";
       this.#activeCall = call;
 
+      call.on("ended", () => {
+        if (this.#activeCall === call) {
+          this.#activeCall = null;
+        }
+        this.#handleAudioCaptureStop();
+      });
+
       this.emit("call", call);
 
       if (this.#config.autoAnswer) {

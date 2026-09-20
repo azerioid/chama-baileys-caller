@@ -311,7 +311,7 @@ export class SignalingBridge {
             return;
         const incomingCallId = String(voipChild.attrs["call-id"] ?? voipChild.attrs.call_id ?? "");
         const callIdForRouting = incomingCallId || activeCallId;
-        if (activeCallId && incomingCallId && incomingCallId !== activeCallId)
+        if (voipChild.tag !== "offer" && activeCallId && incomingCallId && incomingCallId !== activeCallId)
             return;
         const senderDeviceJid = String(voipChild.attrs.participant ?? "") ||
             String(node.attrs.participant ?? "") ||
