@@ -131,6 +131,7 @@ export class ActiveCall extends EventEmitter {
     this.#ended = true;
     if (this.#endTimer) { clearTimeout(this.#endTimer); this.#endTimer = null; }
     try { this.engine.endCall(0, true); } catch {}
+    this._forceEnd("ended");
   };
 
   mute = (muted: boolean): void => {
@@ -339,6 +340,7 @@ export class VoipClient extends EventEmitter {
       console.log(`\n🔔 [VoipClient] Received CB:call stanza! Node tag: ${node?.tag}`);
       this.#signaling!.processIncomingCall(node, this.#engine!, this.#activeCall?.callId ?? "");
       this.#checkIncomingCallOffer(node);
+      this.#checkIncomingCallTerminate(node);
     });
     this.#sock.ws?.on?.("CB:receipt", (node: any) => {
       if (!isCallReceiptNode(node)) return;
@@ -447,6 +449,15 @@ export class VoipClient extends EventEmitter {
         String(voipChild.attrs["call-creator"] ?? "");
       const callbackPeerJid = String(node.attrs.from ?? "") || senderDeviceJid;
 
+      if (this.#activeCall && this.#activeCall.callId !== incomingCallId) {
+        console.log(`[VoipClient] Cleaning up previous call ${this.#activeCall.callId} to receive new call ${incomingCallId}`);
+        this.#activeCall._forceEnd("superseded");
+        this.#activeCall = null;
+        this.#handleAudioCaptureStop();
+        try { this.#engine?.endCall(0, false); } catch {}
+        void this.#relay?.closeAll();
+      }
+
       const call = new ActiveCall(
         incomingCallId,
         this.#engine!,
@@ -462,6 +473,7 @@ export class VoipClient extends EventEmitter {
           this.#activeCall = null;
         }
         this.#handleAudioCaptureStop();
+        try { this.#engine?.endCall(0, false); } catch {}
         void this.#relay?.closeAll();
       });
 
@@ -480,6 +492,23 @@ export class VoipClient extends EventEmitter {
     } catch (err) {
       console.error("[VoipClient] Error inspecting incoming call:", err);
     }
+  };
+
+  #checkIncomingCallTerminate = (node: any): void => {
+    try {
+      const { getAllBinaryNodeChildren } = this.#baileys;
+      const voipChild = getAllBinaryNodeChildren(node)[0];
+      if (voipChild && (voipChild.tag === "terminate" || voipChild.tag === "reject")) {
+        console.log(`📴 [VoipClient] Remote peer terminated/rejected call (tag: <${voipChild.tag}>)`);
+        if (this.#activeCall) {
+          this.#activeCall._forceEnd(voipChild.tag);
+          this.#activeCall = null;
+        }
+        this.#handleAudioCaptureStop();
+        try { this.#engine?.endCall(0, false); } catch {}
+        void this.#relay?.closeAll();
+      }
+    } catch {}
   };
 
   #handleCallEvent = (eventType: number, eventData?: string): void => {
@@ -552,10 +581,9 @@ export class VoipClient extends EventEmitter {
       audioSource,
       () => {
         console.log("[VoipClient] Audio playback completed. Auto hanging up call...");
-        setTimeout(() => {
-          this.#activeCall?.end();
-        }, 1000);
+        this.#activeCall?.end();
       },
+      false,
     );
     this.#feeder.start();
   };

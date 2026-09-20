@@ -24,6 +24,7 @@ export class AudioFeeder {
   underflowChunks = 0;
   bytesProduced = 0;
   chunksEmitted = 0;
+  #finishedEmitted = false;
 
   constructor(
     private readonly sampleRate: number,
@@ -32,6 +33,7 @@ export class AudioFeeder {
     private readonly onChunk: (chunk: Float32Array) => void,
     private readonly source: string = "silence",
     private readonly onFinished?: () => void,
+    private readonly loop: boolean = false,
   ) {}
 
   start = (): void => {
@@ -159,14 +161,22 @@ export class AudioFeeder {
 
     const frame = new Float32Array(chunkSamples);
     const audio = this.#samples;
+    let finished = false;
 
     if (audio && audio.length > 0) {
       for (let i = 0; i < chunkSamples; i++) {
-        frame[i] = audio[this.#playhead];
-        this.#playhead += 1;
-        if (this.#playhead >= audio.length) {
-          // Seamless loop back to the beginning!
-          this.#playhead = 0;
+        if (this.#playhead < audio.length) {
+          frame[i] = audio[this.#playhead];
+          this.#playhead += 1;
+        } else {
+          if (this.loop) {
+            this.#playhead = 0;
+            frame[i] = audio[this.#playhead];
+            this.#playhead += 1;
+          } else {
+            frame[i] = 0;
+            finished = true;
+          }
         }
       }
     } else {
@@ -176,6 +186,13 @@ export class AudioFeeder {
     this.chunksEmitted += 1;
     this.bytesProduced += frame.byteLength;
     this.onChunk(frame);
+
+    if (finished && !this.#finishedEmitted) {
+      this.#finishedEmitted = true;
+      console.log(`[AudioFeeder] Audio playback completed (${this.chunksEmitted} chunks emitted). Triggering onFinished to cut call...`);
+      this.stop();
+      this.onFinished?.();
+    }
   };
 
   stop = (): void => {
