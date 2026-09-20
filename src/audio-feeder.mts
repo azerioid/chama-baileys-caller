@@ -44,6 +44,7 @@ export class AudioFeeder {
 
     const inputArgs = this.#resolveInputArgs();
 
+    console.log(`[AudioFeeder] Spawning ffmpeg for source: ${this.source}`);
     this.#proc = spawn("ffmpeg", [
       "-hide_banner",
       "-loglevel", "error",
@@ -56,6 +57,9 @@ export class AudioFeeder {
     ]);
 
     this.#proc.stdout.on("data", (chunk: Buffer) => {
+      if (this.bytesProduced === 0) {
+        console.log(`[AudioFeeder] First audio chunk received from ffmpeg! (${chunk.length} bytes)`);
+      }
       this.#pending = Buffer.concat([this.#pending, chunk]);
       while (this.#pending.length >= chunkBytes) {
         if (this.#queue.length >= MAX_QUEUED_CHUNKS) {
@@ -88,6 +92,7 @@ export class AudioFeeder {
   };
 
   stop = (): void => {
+    console.log(`[AudioFeeder] Stopped. Total emitted chunks: ${this.chunksEmitted}, produced bytes: ${this.bytesProduced}`);
     if (this.#emitTimer) {
       clearTimeout(this.#emitTimer);
       this.#emitTimer = null;

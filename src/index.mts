@@ -453,6 +453,11 @@ export class VoipClient extends EventEmitter {
         const callState = Number(info.call_state ?? info.callState ?? 0);
         console.log(`[VoipClient] WASM Call State transitioned to: ${callState}`);
         this.#activeCall?._updateState(callState);
+
+        if (callState === 6) { // CallState.Active
+          console.log("[VoipClient] Call reached Active state (6). Starting audio streamer...");
+          this.#handleAudioCaptureStart();
+        }
       } catch {}
     } else if (eventType === 156 && eventData) {
       try {
@@ -460,9 +465,16 @@ export class VoipClient extends EventEmitter {
         console.log(`[VoipClient] WASM Relay List Update (${update.relays?.length || 0} relays available)`);
         this.#relay?.updateRelayList(update);
       } catch {}
-    } else if (eventType === 2) {
-      console.log("[VoipClient] WASM Event 2 (remote_end) received!");
-      this.#activeCall?._forceEnd("remote_end");
+    }
+  };
+
+  #ensureCaptureBuffer = (): void => {
+    if (!this.#engine) return;
+    if (!this.#capturePtr) {
+      const chunkSamples = this.#captureFramesPerChunk * this.#captureChannels;
+      this.#captureChunkBytes = chunkSamples * Float32Array.BYTES_PER_ELEMENT;
+      this.#capturePtr = this.#engine.malloc(this.#captureChunkBytes);
+      console.log(`[VoipClient] Allocated audio capture buffer: ptr=${this.#capturePtr}, bytes=${this.#captureChunkBytes} (${this.#captureSampleRate}Hz, ${this.#captureChannels}ch)`);
     }
   };
 
@@ -473,20 +485,31 @@ export class VoipClient extends EventEmitter {
     this.#captureSampleRate = config.sampleRate || 16000;
     this.#captureChannels = config.channels || 1;
     this.#captureFramesPerChunk = config.framesPerChunk || 320;
-    const chunkSamples = this.#captureFramesPerChunk * this.#captureChannels;
-    this.#captureChunkBytes = chunkSamples * Float32Array.BYTES_PER_ELEMENT;
-    this.#capturePtr = this.#engine.malloc(this.#captureChunkBytes);
+    this.#ensureCaptureBuffer();
   };
 
   #handleAudioCaptureStart = (): void => {
-    if (!this.#engine || !this.#capturePtr) return;
+    if (!this.#engine) return;
+    this.#ensureCaptureBuffer();
+    if (!this.#capturePtr) {
+      console.error("[VoipClient] Failed to allocate audio capture buffer!");
+      return;
+    }
+    if (this.#feeder) {
+      console.log("[VoipClient] Audio feeder is already active.");
+      return;
+    }
+
     const audioSource = this.#activeCall?._audioSource ?? this.#config.defaultAudioSource ?? "silence";
+    console.log(`[VoipClient] Starting AudioFeeder with source: ${audioSource}`);
     this.#feeder = new AudioFeeder(
       this.#captureSampleRate,
       this.#captureChannels,
       this.#captureFramesPerChunk,
       (chunk) => {
-        if (this.#engine && this.#capturePtr) this.#engine.sendAudioData(chunk, this.#capturePtr);
+        if (this.#engine && this.#capturePtr) {
+          this.#engine.sendAudioData(chunk, this.#capturePtr);
+        }
       },
       audioSource,
       () => {
@@ -500,6 +523,7 @@ export class VoipClient extends EventEmitter {
   };
 
   #handleAudioCaptureStop = (): void => {
+    console.log("[VoipClient] Stopping AudioFeeder...");
     this.#feeder?.stop();
     this.#feeder = null;
     if (this.#engine && this.#capturePtr) {
