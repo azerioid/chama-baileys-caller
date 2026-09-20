@@ -278,6 +278,31 @@ export class VoipClient extends EventEmitter {
       connectSocket();
     });
 
+    await this.#initVoipOnSocket();
+  };
+
+  /** Attach to an existing Baileys socket instead of creating a new one. */
+  attach = async (sock: any): Promise<void> => {
+    this.#baileys = await loadBaileys();
+    this.#sock = sock;
+
+    if (this.#sock.authState?.creds?.me?.id && this.#sock.ws?.isOpen) {
+      await this.#initVoipOnSocket();
+    } else {
+      await new Promise<void>((resolve) => {
+        const handler = async (update: any) => {
+          if (update.connection === "open") {
+            this.#sock.ev.off("connection.update", handler);
+            await this.#initVoipOnSocket();
+            resolve();
+          }
+        };
+        this.#sock.ev.on("connection.update", handler);
+      });
+    }
+  };
+
+  #initVoipOnSocket = async (): Promise<void> => {
     this.#signaling = new SignalingBridge({ sock: this.#sock });
     await this.#signaling.init();
 
@@ -310,11 +335,11 @@ export class VoipClient extends EventEmitter {
     await this.#engine.waitForVoipStackReady();
     try { this.#engine.updateNetworkMedium(2, 0); } catch {}
 
-    this.#sock.ws.on("CB:call", (node: any) => {
+    this.#sock.ws?.on?.("CB:call", (node: any) => {
       this.#signaling!.processIncomingCall(node, this.#engine!, this.#activeCall?.callId ?? "");
       this.#checkIncomingCallOffer(node);
     });
-    this.#sock.ws.on("CB:receipt", (node: any) => {
+    this.#sock.ws?.on?.("CB:receipt", (node: any) => {
       if (!isCallReceiptNode(node)) return;
       this.#signaling!.processIncomingReceipt(node, this.#engine!, this.#activeCall?.callId ?? "");
     });

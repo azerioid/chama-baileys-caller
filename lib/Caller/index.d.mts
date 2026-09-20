@@ -47,6 +47,8 @@ export declare class VoipClient extends EventEmitter {
     get engine(): WasmEngine | null;
     /** Connect to WhatsApp and bring up the WASM VoIP stack. */
     connect: () => Promise<void>;
+    /** Attach to an existing Baileys socket instead of creating a new one. */
+    attach: (sock: any) => Promise<void>;
     /** Place an outbound voice call. */
     call: (phoneNumber: string, opts?: {
         audioSource?: string;
