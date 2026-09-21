@@ -515,16 +515,17 @@ export class WasmEngine {
   };
 
   handleSignalingOffer = (msg: {
-    payload: string; peerPlatform?: number; peerAppVersion?: string;
+    payload: string; peerPlatform?: string | number; peerAppVersion?: string;
     epochId?: string; timestamp?: string; isOffline?: boolean;
     isOfferNotContact?: boolean; peerJid: string; tcToken?: Uint8Array;
   }): void => {
     this.#ensureInitialized();
     const tcTokenList = this.#createUint8List(msg.tcToken);
+    console.log(`[WasmEngine] Calling handleIncomingSignalingOffer for peer: "${msg.peerJid}", platform: "${msg.peerPlatform}", version: "${msg.peerAppVersion}"`);
     try {
       this.#instance.handleIncomingSignalingOffer(
         msg.payload,
-        String(msg.peerPlatform ?? 0),
+        String(msg.peerPlatform ?? ""),
         String(msg.peerAppVersion ?? "0"),
         String(msg.epochId ?? "0"),
         String(msg.timestamp ?? "0"),
@@ -533,6 +534,9 @@ export class WasmEngine {
         String(msg.peerJid),
         tcTokenList,
       );
+      console.log(`[WasmEngine] handleIncomingSignalingOffer dispatched successfully to WASM for "${msg.peerJid}"`);
+    } catch (err: any) {
+      console.error(`[WasmEngine] Error in handleIncomingSignalingOffer:`, err?.message || err);
     } finally {
       tcTokenList?.delete?.();
     }

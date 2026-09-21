@@ -65,7 +65,7 @@ export declare class WasmEngine {
     updateNetworkMedium: (networkMedium: number, networkMtu?: number) => void;
     handleSignalingOffer: (msg: {
         payload: string;
-        peerPlatform?: number;
+        peerPlatform?: string | number;
         peerAppVersion?: string;
         epochId?: string;
         timestamp?: string;

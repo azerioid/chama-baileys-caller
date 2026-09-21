@@ -408,10 +408,11 @@ export class SignalingBridge {
 
     switch (usableNode.tag) {
       case "offer":
+        console.log(`[Signaling] Feeding decrypted offer to WASM voip.handleSignalingOffer: peerJid="${routedPeerJid}", platform="${platform}", appVersion="${appVersion}"`);
         voip.handleSignalingOffer({
           payload: b64,
-          peerPlatform: Number(platform || 0),
-          peerAppVersion: appVersion,
+          peerPlatform: String(platform || ""),
+          peerAppVersion: String(appVersion || ""),
           epochId, timestamp,
           isOffline: offline,
           isOfferNotContact: false,
@@ -496,6 +497,7 @@ export class SignalingBridge {
         }
         console.log(`✅ [Signaling] Successfully decrypted callKey (${callKey.length} bytes) using JID ${jid}`);
         enc.content = callKey;
+        enc.attrs.type = "msg"; // Offer is now decrypted, WASM expects regular session msg
         return voipNode;
       } catch (err: any) {
         lastErr = err;
@@ -597,8 +599,10 @@ export class SignalingBridge {
     const decoded = jidDecode(jid);
     if (!decoded?.user) return jid;
     const server = jid.endsWith("@lid") ? "lid" : "s.whatsapp.net";
-    const device = decoded.device ?? 0;
-    return `${decoded.user}:${device}@${server}`;
+    if (decoded.device == null) {
+      return server === "lid" ? `${decoded.user}@lid` : `${decoded.user}:0@${server}`;
+    }
+    return `${decoded.user}:${decoded.device}@${server}`;
   };
 
   #toPrimaryDeviceJid = (jid: string): string | undefined => {
