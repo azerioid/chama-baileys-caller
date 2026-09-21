@@ -362,6 +362,10 @@ export class SignalingBridge {
     if (!voipChild) return;
 
     const incomingCallId = String(voipChild.attrs["call-id"] ?? voipChild.attrs.call_id ?? "");
+    if (voipChild.tag === "offer") {
+      console.log(`[Signaling] Inbound <offer> attrs:`, JSON.stringify(voipChild.attrs));
+      console.log(`[Signaling] Inbound <offer> children:`, Array.isArray(voipChild.content) ? voipChild.content.map((c: any) => c?.tag || typeof c) : typeof voipChild.content);
+    }
     const callIdForRouting = incomingCallId || activeCallId;
     if (voipChild.tag !== "offer" && activeCallId && incomingCallId && incomingCallId !== activeCallId) return;
 
@@ -404,7 +408,9 @@ export class SignalingBridge {
       this.#incomingCallPeerById.set(callIdForRouting, routedPeerJid);
     }
 
-    const tcToken = await this.ensureTcToken(routedPeerJid, callbackPeerJid);
+    const tcToken = usableNode.tag === "offer"
+      ? ((await this.#getTcToken(routedPeerJid)) || (await this.#getTcToken(callbackPeerJid)))
+      : await this.ensureTcToken(routedPeerJid, callbackPeerJid);
 
     switch (usableNode.tag) {
       case "offer":
