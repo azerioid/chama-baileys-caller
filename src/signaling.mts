@@ -364,7 +364,14 @@ export class SignalingBridge {
     const incomingCallId = String(voipChild.attrs["call-id"] ?? voipChild.attrs.call_id ?? "");
     if (voipChild.tag === "offer") {
       console.log(`[Signaling] Inbound <offer> attrs:`, JSON.stringify(voipChild.attrs));
-      console.log(`[Signaling] Inbound <offer> children:`, Array.isArray(voipChild.content) ? voipChild.content.map((c: any) => c?.tag || typeof c) : typeof voipChild.content);
+      if (Array.isArray(voipChild.content)) {
+        console.log(`[Signaling] Inbound <offer> children:`, voipChild.content.map((c: any) => c?.tag || typeof c));
+        for (const child of voipChild.content) {
+          if (child && typeof child === "object") {
+            console.log(`[Signaling]   <${child.tag}>: attrs=${JSON.stringify(child.attrs || {})}`, child.content instanceof Uint8Array ? `(${child.content.length} bytes)` : "");
+          }
+        }
+      }
     }
     const callIdForRouting = incomingCallId || activeCallId;
     if (voipChild.tag !== "offer" && activeCallId && incomingCallId && incomingCallId !== activeCallId) return;
@@ -504,6 +511,15 @@ export class SignalingBridge {
         console.log(`✅ [Signaling] Successfully decrypted callKey (${callKey.length} bytes) using JID ${jid}`);
         enc.content = callKey;
         enc.attrs.type = "msg"; // Offer is now decrypted, WASM expects regular session msg
+        // Remove <encopt> if present: encopt contains the HMAC signature over the original wire ciphertext.
+        // Leaving it with plaintext callKey causes WASM offer verification failure (CallOfferAckCorrupt).
+        if (Array.isArray(voipNode.content)) {
+          const prevLen = voipNode.content.length;
+          voipNode.content = voipNode.content.filter((c: any) => c?.tag !== "encopt");
+          if (voipNode.content.length < prevLen) {
+            console.log(`[Signaling] Stripped <encopt> node from decrypted offer (preventing verification failure)`);
+          }
+        }
         return voipNode;
       } catch (err: any) {
         lastErr = err;
@@ -605,10 +621,8 @@ export class SignalingBridge {
     const decoded = jidDecode(jid);
     if (!decoded?.user) return jid;
     const server = jid.endsWith("@lid") ? "lid" : "s.whatsapp.net";
-    if (decoded.device == null) {
-      return server === "lid" ? `${decoded.user}@lid` : `${decoded.user}:0@${server}`;
-    }
-    return `${decoded.user}:${decoded.device}@${server}`;
+    const device = decoded.device ?? 0;
+    return `${decoded.user}:${device}@${server}`;
   };
 
   #toPrimaryDeviceJid = (jid: string): string | undefined => {

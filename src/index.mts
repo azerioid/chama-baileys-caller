@@ -335,6 +335,7 @@ export class VoipClient extends EventEmitter {
 
     this.#engine = new WasmEngine({
       callbacks: {
+        onLog: (level, msg) => console.log(`[WASM ${level}] ${msg}`),
         onSignalingXmpp: (peerJid, callId, xmlPayload) =>
           this.#signaling!.sendSignaling(peerJid, callId, xmlPayload),
         onCallEvent: (eventType, eventData) => this.#handleCallEvent(eventType, eventData),

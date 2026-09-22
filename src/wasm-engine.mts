@@ -373,6 +373,8 @@ export class WasmEngine {
       wasmBinary: wasmBuffer,
       wasmMemory: memory,
       locateFile: () => this.#config.wasmPath,
+      print: (text: string) => console.log(`[WASM stdout] ${text}`),
+      printErr: (text: string) => console.error(`[WASM stderr] ${text}`),
       onRuntimeInitialized: () => {},
     });
 
