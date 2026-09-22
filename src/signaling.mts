@@ -393,6 +393,24 @@ export class SignalingBridge {
       usableNode = await this.#maybeDecryptEnc(voipChild, senderDeviceJid);
     }
 
+    if (usableNode.tag === "offer") {
+      const creator = String(usableNode.attrs["call-creator"] ?? "");
+      if (creator) {
+        const normalizedCreator = this.#toCallDeviceJid(creator);
+        if (normalizedCreator !== creator) {
+          console.log(`[Signaling] Normalizing offer call-creator from "${creator}" to "${normalizedCreator}" (ensuring TAGS.AD_JID with LID domainType for WASM)`);
+          usableNode.attrs["call-creator"] = normalizedCreator;
+        }
+      }
+      const participant = String(usableNode.attrs.participant ?? "");
+      if (participant) {
+        const normalizedParticipant = this.#toCallDeviceJid(participant);
+        if (normalizedParticipant !== participant) {
+          usableNode.attrs.participant = normalizedParticipant;
+        }
+      }
+    }
+
     const b64 = Buffer.from(encodeBinaryNode(usableNode)).toString("base64");
 
     const storedPeerJid = callIdForRouting ? this.#incomingCallPeerById.get(callIdForRouting) : undefined;
